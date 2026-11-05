@@ -18,8 +18,8 @@
   --bg:#f4f3f0; --surface:#fcfcfb; --line:#e4e2dc;
   --text:#0b0b0b; --text-2:#52514e; --muted:#8a8984;
   --accent:#2a78d6; --accent-soft:#2a78d61f;
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
-  --danger:#c23b3a;
+  --s1:#c026d3; --s2:#0b0b0b; --s3:#1baf7a;
+  --star:#5b21b6; --danger:#c23b3a;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -27,7 +27,8 @@
     --bg:#111110; --surface:#1a1a19; --line:#2c2c2a;
     --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86;
     --accent:#3987e5; --accent-soft:#3987e526;
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --danger:#e66767;
+    --s1:#e879f9; --s2:#f0efec; --s3:#199e70;
+    --star:#a78bfa; --danger:#e66767;
   }
 }
 :root[data-theme="dark"]{
@@ -35,7 +36,8 @@
   --bg:#111110; --surface:#1a1a19; --line:#2c2c2a;
   --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86;
   --accent:#3987e5; --accent-soft:#3987e526;
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --danger:#e66767;
+  --s1:#e879f9; --s2:#f0efec; --s3:#199e70;
+  --star:#a78bfa; --danger:#e66767;
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);
@@ -48,7 +50,7 @@ nav{position:fixed;bottom:0;left:0;right:0;z-index:5;background:var(--surface);b
   display:flex;padding-bottom:env(safe-area-inset-bottom)}
 nav button{flex:1;background:none;border:0;padding:10px 0 8px;color:var(--muted);font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav button svg{width:22px;height:22px}
-nav button.on{color:var(--accent)}
+nav button.on{color:var(--s1)}
 .btn{border:0;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:600;background:var(--accent);color:#fff}
 .btn.ghost{background:var(--accent-soft);color:var(--accent)}
 .btn.danger{background:none;color:var(--danger)}
@@ -72,11 +74,11 @@ nav button.on{color:var(--accent)}
 .xlab{display:flex;gap:4px;margin-top:4px}
 .xlab span{flex:1;text-align:center;font-size:11px;color:var(--muted)}
 /* horizontal bars */
-.hrow{display:grid;grid-template-columns:110px 1fr auto;gap:8px;align-items:center;margin:7px 0;font-size:13px}
-.hrow .name{color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hrow .track{height:14px}
+.hrow{display:grid;grid-template-columns:1fr auto;column-gap:8px;row-gap:3px;margin:10px 0;font-size:13px}
+.hrow .name{grid-column:1;grid-row:1;color:var(--text-2)}
+.hrow .track{grid-column:1 / -1;grid-row:2;height:12px}
 .hrow .fill{height:100%;background:var(--s1);border-radius:0 4px 4px 0;min-width:2px}
-.hrow .num{font-variant-numeric:tabular-nums;color:var(--text);min-width:58px;text-align:right}
+.hrow .num{grid-column:2;grid-row:1;font-variant-numeric:tabular-nums;color:var(--text);text-align:right}
 .hrow .num small{color:var(--muted)}
 .split{display:flex;height:22px;gap:2px;border-radius:6px;overflow:hidden;margin:4px 0 8px}
 .split div{height:100%}
@@ -86,7 +88,7 @@ nav button.on{color:var(--accent)}
 .list li{display:flex;gap:10px;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
 .list li:last-child{border-bottom:0}
 .muted{color:var(--muted)} .small{font-size:12px}
-.stars{color:#eda100;letter-spacing:1px;white-space:nowrap}
+.stars{color:var(--star);letter-spacing:1px;white-space:nowrap}
 .search{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:16px;margin-bottom:10px}
 .book{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px}
 .book .t{font-weight:600}
@@ -101,7 +103,7 @@ form textarea{min-height:70px;resize:vertical}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .rating-pick{display:flex;gap:6px}
 .rating-pick button{flex:1;padding:10px 0;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text-2);font-size:16px}
-.rating-pick button.on{background:#eda100;border-color:#eda100;color:#111}
+.rating-pick button.on{background:var(--star);border-color:var(--star);color:#fff}
 .actions{display:flex;gap:10px;margin-top:18px}
 .actions .btn{flex:1}
 .center{text-align:center;padding:40px 10px}
