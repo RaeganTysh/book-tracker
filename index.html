@@ -138,6 +138,7 @@ form textarea{min-height:70px;resize:vertical}
     </div>
     <div id="bookList"></div>
   </section>
+  <section id="view-info" class="hidden"></section>
   <section id="view-edit" class="hidden">
     <form id="bookForm" autocomplete="off">
       <label>Title</label><input name="Book" required>
@@ -173,14 +174,15 @@ form textarea{min-height:70px;resize:vertical}
 <nav id="nav" class="hidden">
   <button data-view="stats" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Stats</button>
   <button data-view="library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l3.5-1 3 15.5-3.5 1z"/></svg>Library</button>
+  <button data-view="info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Info</button>
   <button data-view="edit" id="addNav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add</button>
 </nav>
 <div class="toast" id="toast"></div>
 
 <script>
 /* ======== SETTINGS: edit these two lines ======== */
-const CLIENT_ID = "3c2cad30-c8f6-4722-bc95-ccd44c9752e6";
-const FILE_PATH = "Personal/BookTracker.xlsx";   // path inside OneDrive, e.g. "Documents/BookTracker.xlsx"
+const CLIENT_ID = "PASTE-YOUR-APPLICATION-CLIENT-ID-HERE";
+const FILE_PATH = "BookTracker.xlsx";   // path inside OneDrive, e.g. "Documents/BookTracker.xlsx"
 /* ================================================= */
 
 const SHEET = "Books";
@@ -195,7 +197,7 @@ const msalApp = new msal.PublicClientApplication({
   cache:{ cacheLocation:"localStorage" }
 });
 
-let account=null, workbook=null, eTag=null, books=[], editIndex=-1;
+let account=null, workbook=null, eTag=null, books=[], subs=[], editIndex=-1;
 let yearFilter="all", sortMode="recent", ratingVal=null;
 const $ = id => document.getElementById(id);
 const show = (id,on=true) => $(id).classList.toggle("hidden",!on);
@@ -233,6 +235,8 @@ async function loadData(){
     const ws = workbook.Sheets[SHEET];
     if(!ws) throw new Error(`The workbook has no "${SHEET}" sheet.`);
     books = XLSX.utils.sheet_to_json(ws,{defval:null}).filter(r=>r.Book).map(normalize);
+    const subWs = workbook.Sheets["Subscriptions"];
+    subs = subWs ? XLSX.utils.sheet_to_json(subWs,{defval:null}).filter(r=>r.Service && (r.Renews!=null || r.Allowance!=null || r.Cost!=null)) : [];
     show("loading",false); show("nav"); show("signoutBtn");
     buildDatalists(); go(currentView||"stats");
   }catch(e){ if(e.name!=="BrowserAuthError" && !/interaction/i.test(e.errorCode||"")) fail(e.message); }
@@ -273,10 +277,10 @@ let currentView=null;
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{ if(b.dataset.view==="edit") openForm(-1); else go(b.dataset.view); });
 function go(v){
   currentView=v;
-  ["stats","library","edit"].forEach(x=>show("view-"+x,x===v));
+  ["stats","library","info","edit"].forEach(x=>show("view-"+x,x===v));
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.view===v));
-  $("title").textContent = v==="stats"?"Reading Stats": v==="library"?`Library (${books.length})`:(editIndex>=0?"Edit book":"Add a book");
-  if(v==="stats") renderStats(); if(v==="library") renderLibrary();
+  $("title").textContent = v==="stats"?"Reading Stats": v==="library"?`Library (${books.length})`: v==="info"?"Subscriptions":(editIndex>=0?"Edit book":"Add a book");
+  if(v==="stats") renderStats(); if(v==="library") renderLibrary(); if(v==="info") renderInfo();
   window.scrollTo(0,0);
 }
 $("refreshBtn").onclick=()=>{ if(account) loadData(); };
@@ -294,7 +298,6 @@ function renderStats(){
   const rated = data.filter(b=>b.Rating!=null).map(b=>b.Rating);
   const now=new Date();
   const thisMonth = books.filter(b=>b.Finished&&b.Finished.getFullYear()===now.getFullYear()&&b.Finished.getMonth()===now.getMonth());
-  const spotifyHrs = sum(thisMonth.filter(b=>b.Source==="Spotify"),b=>b.Hours);
 
   // monthly series (continuous months between first and last)
   const dated = data.filter(b=>b.Finished).sort((a,b)=>a.Finished-b.Finished);
@@ -339,7 +342,7 @@ function renderStats(){
       <div class="kpi"><div class="v">${fmt(data.length?sum(data,b=>b.Hours)/data.length:null,1)}</div><div class="l">Avg hours / book</div></div>
       <div class="kpi"><div class="v">${fmt(perMonth.length?data.length/perMonth.length:null,1)}</div><div class="l">Books / month</div></div>
       <div class="kpi"><div class="v">${thisMonth.length}</div><div class="l">Finished this month</div></div>
-      <div class="kpi"><div class="v">${fmt(spotifyHrs,1)}<span class="muted" style="font-size:15px"> / 15</span></div><div class="l">Spotify hrs this month</div></div>
+      <div class="kpi"><div class="v">${data.filter(b=>b.Rating===5).length}</div><div class="l">5-star books</div></div>
     </div>
     <div class="card"><h2>Books per month</h2>${vbars("count",maxCount,"books",0)}</div>
     <div class="card"><h2>Hours per month</h2>${vbars("hours",maxHrs,"hrs",0)}</div>
@@ -360,6 +363,31 @@ function renderStats(){
       $("tip-"+key).innerHTML = `<b>${p.full}</b>: ${key==="count"?`${p.count} book${p.count===1?"":"s"}`:`${fmt(p.hours,1)} hours`}${p.titles.length?" · "+esc(p.titles.join(", ")):""}`; };
     c.onclick=h; c.onmouseenter=h;
   });
+}
+
+/* ---------- subscriptions info ---------- */
+function nextRenewal(day){
+  const t=new Date(); t.setHours(0,0,0,0);
+  const make=(y,m)=>new Date(y,m,Math.min(day,new Date(y,m+1,0).getDate())); // handles short months
+  let d=make(t.getFullYear(),t.getMonth());
+  if(d<t) d=make(t.getFullYear(),t.getMonth()+1);
+  return {date:d, days:Math.round((d-t)/864e5)};
+}
+function renderInfo(){
+  const cards = subs.map(s=>{
+    const m=String(s.Renews??"").match(/\d{1,2}/); const day=m?+m[0]:null;
+    let when='<span class="muted">No renewal date</span>';
+    if(day&&day<=31){ const r=nextRenewal(day);
+      const rel = r.days===0?"<b>today</b>": r.days===1?"<b>tomorrow</b>":`in <b>${r.days} days</b>`;
+      when=`Renews ${r.date.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})} · ${rel}`; }
+    return `<div class="card"><div class="row" style="display:flex;justify-content:space-between;gap:8px">
+      <div style="font-size:18px;font-weight:700">${esc(s.Service)}</div>
+      ${s.Cost!=null&&s.Cost!==""?`<div class="muted">$${fmt(+s.Cost,2)}/mo</div>`:""}</div>
+      <div style="margin-top:6px">${when}</div>
+      ${s.Allowance?`<div class="muted small" style="margin-top:4px">${esc(s.Allowance)}</div>`:""}</div>`;
+  }).join("");
+  $("view-info").innerHTML = (cards || '<p class="muted center">No "Subscriptions" tab found in the spreadsheet.</p>') +
+    '<p class="muted small" style="text-align:center">Edit these on the Subscriptions tab in Excel, then tap ↻ Sync.</p>';
 }
 
 /* ---------- library ---------- */
