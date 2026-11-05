@@ -115,12 +115,13 @@ form textarea{min-height:70px;resize:vertical}
 <header>
   <h1 id="title">Books</h1>
   <button class="icon-btn" id="refreshBtn" title="Reload from OneDrive">↻ Sync</button>
+  <button class="icon-btn hidden" id="signoutBtn" title="Sign out">Sign out</button>
 </header>
 
 <main>
   <section id="signin" class="center hidden">
     <h2 style="font-size:22px;margin:0 0 8px">Book Tracker</h2>
-    <p class="muted">Sign in with your Microsoft account to load your list from OneDrive.</p>
+    <p class="muted">Sign in with the Microsoft account whose OneDrive has your book list. You'll get to choose the account.</p>
     <button class="btn" id="loginBtn">Sign in with Microsoft</button>
   </section>
   <section id="loading" class="center"><p class="muted">Loading…</p></section>
@@ -214,7 +215,8 @@ async function init(){
   if(!account){ show("loading",false); show("signin"); return; }
   loadData();
 }
-$("loginBtn").onclick = () => msalApp.loginRedirect({scopes:SCOPES});
+$("loginBtn").onclick = () => msalApp.loginRedirect({scopes:SCOPES, prompt:"select_account"});
+$("signoutBtn").onclick = () => { if(confirm("Sign out of "+(account?.username||"this account")+"?")) msalApp.logoutRedirect({account, postLogoutRedirectUri: location.origin + location.pathname}); };
 
 /* ---------- OneDrive I/O ---------- */
 const itemUrl = () => `${GRAPH}/me/drive/root:/${FILE_PATH.split("/").map(encodeURIComponent).join("/")}`;
@@ -231,7 +233,7 @@ async function loadData(){
     const ws = workbook.Sheets[SHEET];
     if(!ws) throw new Error(`The workbook has no "${SHEET}" sheet.`);
     books = XLSX.utils.sheet_to_json(ws,{defval:null}).filter(r=>r.Book).map(normalize);
-    show("loading",false); show("nav");
+    show("loading",false); show("nav"); show("signoutBtn");
     buildDatalists(); go(currentView||"stats");
   }catch(e){ if(e.name!=="BrowserAuthError" && !/interaction/i.test(e.errorCode||"")) fail(e.message); }
 }
