@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Book Tracker</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Books">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#fcfcfb">
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.30.0/lib/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f4f3f0; --surface:#fcfcfb; --line:#e4e2dc;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#8a8984;
+  --accent:#2a78d6; --accent-soft:#2a78d61f;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --danger:#c23b3a;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111110; --surface:#1a1a19; --line:#2c2c2a;
+    --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86;
+    --accent:#3987e5; --accent-soft:#3987e526;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --danger:#e66767;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111110; --surface:#1a1a19; --line:#2c2c2a;
+  --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86;
+  --accent:#3987e5; --accent-soft:#3987e526;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --danger:#e66767;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top) + 10px) 16px 8px;
+  display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
+header h1{font-size:20px;margin:0;flex:1;letter-spacing:-.01em}
+main{padding:14px 16px calc(env(safe-area-inset-bottom) + 84px);max-width:760px;margin:0 auto}
+nav{position:fixed;bottom:0;left:0;right:0;z-index:5;background:var(--surface);border-top:1px solid var(--line);
+  display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;padding:10px 0 8px;color:var(--muted);font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button svg{width:22px;height:22px}
+nav button.on{color:var(--accent)}
+.btn{border:0;border-radius:10px;padding:10px 14px;font-size:15px;font-weight:600;background:var(--accent);color:#fff}
+.btn.ghost{background:var(--accent-soft);color:var(--accent)}
+.btn.danger{background:none;color:var(--danger)}
+.icon-btn{background:none;border:0;color:var(--accent);font-size:14px;font-weight:600;padding:6px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.card h2{font-size:13px;font-weight:600;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+@media(min-width:560px){.kpis{grid-template-columns:repeat(4,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px}
+.kpi .v{font-size:26px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:12px;color:var(--text-2)}
+.seg{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;scrollbar-width:none}
+.seg button{border:1px solid var(--line);background:var(--surface);color:var(--text-2);border-radius:999px;padding:6px 12px;font-size:13px;white-space:nowrap}
+.seg button.on{background:var(--text);color:var(--surface);border-color:var(--text)}
+/* vertical bars */
+.vbars{display:flex;align-items:flex-end;gap:4px;height:150px;border-bottom:1px solid var(--line);position:relative}
+.vbars .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;cursor:pointer}
+.vbars .bar{width:100%;max-width:34px;background:var(--s1);border-radius:4px 4px 0 0;min-height:2px}
+.vbars .col:hover .bar,.vbars .col.sel .bar{filter:brightness(1.15)}
+.vbars .val{font-size:11px;color:var(--text-2);margin-bottom:3px;font-variant-numeric:tabular-nums;height:14px}
+.xlab{display:flex;gap:4px;margin-top:4px}
+.xlab span{flex:1;text-align:center;font-size:11px;color:var(--muted)}
+/* horizontal bars */
+.hrow{display:grid;grid-template-columns:110px 1fr auto;gap:8px;align-items:center;margin:7px 0;font-size:13px}
+.hrow .name{color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrow .track{height:14px}
+.hrow .fill{height:100%;background:var(--s1);border-radius:0 4px 4px 0;min-width:2px}
+.hrow .num{font-variant-numeric:tabular-nums;color:var(--text);min-width:58px;text-align:right}
+.hrow .num small{color:var(--muted)}
+.split{display:flex;height:22px;gap:2px;border-radius:6px;overflow:hidden;margin:4px 0 8px}
+.split div{height:100%}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--text-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;gap:10px;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.list li:last-child{border-bottom:0}
+.muted{color:var(--muted)} .small{font-size:12px}
+.stars{color:#eda100;letter-spacing:1px;white-space:nowrap}
+.search{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:16px;margin-bottom:10px}
+.book{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px}
+.book .t{font-weight:600}
+.book .meta{font-size:12px;color:var(--text-2);margin-top:2px}
+.book .d{font-size:13px;color:var(--text-2);margin-top:6px;display:none}
+.book.open .d{display:block}
+.book .row{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.chip{font-size:11px;border-radius:999px;padding:2px 8px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+form label{display:block;font-size:13px;color:var(--text-2);margin:12px 0 4px}
+form input,form select,form textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:16px;font-family:inherit}
+form textarea{min-height:70px;resize:vertical}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rating-pick{display:flex;gap:6px}
+.rating-pick button{flex:1;padding:10px 0;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text-2);font-size:16px}
+.rating-pick button.on{background:#eda100;border-color:#eda100;color:#111}
+.actions{display:flex;gap:10px;margin-top:18px}
+.actions .btn{flex:1}
+.center{text-align:center;padding:40px 10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 80px);background:var(--text);color:var(--surface);padding:10px 16px;border-radius:999px;font-size:14px;z-index:20;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.tip{font-size:12px;color:var(--text-2);margin-top:8px;min-height:16px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Books</h1>
+  <button class="icon-btn" id="refreshBtn" title="Reload from OneDrive">↻ Sync</button>
+</header>
+
+<main>
+  <section id="signin" class="center hidden">
+    <h2 style="font-size:22px;margin:0 0 8px">Book Tracker</h2>
+    <p class="muted">Sign in with your Microsoft account to load your list from OneDrive.</p>
+    <button class="btn" id="loginBtn">Sign in with Microsoft</button>
+  </section>
+  <section id="loading" class="center"><p class="muted">Loading…</p></section>
+  <section id="error" class="center hidden"><p id="errorMsg"></p><button class="btn ghost" onclick="loadData()">Try again</button></section>
+
+  <section id="view-stats" class="hidden"></section>
+  <section id="view-library" class="hidden">
+    <input class="search" id="search" placeholder="Search title, author, genre…" type="search">
+    <div class="seg" id="sortSeg">
+      <button data-sort="recent" class="on">Recent</button>
+      <button data-sort="rating">Top rated</button>
+      <button data-sort="title">A–Z</button>
+      <button data-sort="hours">Longest</button>
+    </div>
+    <div id="bookList"></div>
+  </section>
+  <section id="view-edit" class="hidden">
+    <form id="bookForm" autocomplete="off">
+      <label>Title</label><input name="Book" required>
+      <label>Author</label><input name="Author" list="authorList">
+      <div class="grid2">
+        <div><label>Type</label><select name="Type"><option>Fiction</option><option>Non-Fiction</option></select></div>
+        <div><label>Finished</label><input name="Finished" type="month" required></div>
+      </div>
+      <label>Genre <span class="muted small">(separate with ;)</span></label><input name="Genre" list="genreList">
+      <div class="grid2">
+        <div><label>Hours</label><input name="Hours" type="number" step="0.25" min="0" inputmode="decimal"></div>
+        <div><label>Source</label><select name="Source"><option>Libby</option><option>Spotify</option><option>Audible</option><option>Other</option></select></div>
+      </div>
+      <div class="grid2">
+        <div><label>Acquired</label><select name="Acquired"><option>Free</option><option>Credit</option><option>Purchased</option></select></div>
+        <div><label>Cost ($)</label><input name="Cost" type="number" step="0.01" min="0" inputmode="decimal"></div>
+      </div>
+      <label>Rating</label>
+      <div class="rating-pick" id="ratingPick"></div>
+      <input type="hidden" name="Rating">
+      <label>Comment</label><textarea name="Comment"></textarea>
+      <label>Description</label><textarea name="Description"></textarea>
+      <div class="actions">
+        <button type="button" class="btn ghost" id="cancelBtn">Cancel</button>
+        <button type="submit" class="btn" id="saveBtn">Save</button>
+      </div>
+      <div class="actions"><button type="button" class="btn danger hidden" id="deleteBtn">Delete book</button></div>
+    </form>
+    <datalist id="authorList"></datalist><datalist id="genreList"></datalist>
+  </section>
+</main>
+
+<nav id="nav" class="hidden">
+  <button data-view="stats" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Stats</button>
+  <button data-view="library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16 5l3.5-1 3 15.5-3.5 1z"/></svg>Library</button>
+  <button data-view="edit" id="addNav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ======== SETTINGS: edit these two lines ======== */
+const CLIENT_ID = "PASTE-YOUR-APPLICATION-CLIENT-ID-HERE";
+const FILE_PATH = "BookTracker.xlsx";   // path inside OneDrive, e.g. "Documents/BookTracker.xlsx"
+/* ================================================= */
+
+const SHEET = "Books";
+const HEADERS = ["Book","Author","Type","Genre","Finished","Hours","Source","Acquired","Cost","Rating","Comment","Description"];
+const SCOPES = ["Files.ReadWrite","User.Read"];
+const GRAPH = "https://graph.microsoft.com/v1.0";
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const msalApp = new msal.PublicClientApplication({
+  auth:{ clientId:CLIENT_ID, authority:"https://login.microsoftonline.com/common",
+         redirectUri: location.origin + location.pathname },
+  cache:{ cacheLocation:"localStorage" }
+});
+
+let account=null, workbook=null, eTag=null, books=[], editIndex=-1;
+let yearFilter="all", sortMode="recent", ratingVal=null;
+const $ = id => document.getElementById(id);
+const show = (id,on=true) => $(id).classList.toggle("hidden",!on);
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2600);}
+
+/* ---------- auth ---------- */
+async function getToken(){
+  try{ return (await msalApp.acquireTokenSilent({scopes:SCOPES,account})).accessToken; }
+  catch(e){ await msalApp.acquireTokenRedirect({scopes:SCOPES,account}); throw e; }
+}
+async function init(){
+  if(CLIENT_ID.startsWith("PASTE")){ fail("Open index.html and paste your Application (client) ID into CLIENT_ID."); return; }
+  await msalApp.initialize();
+  const res = await msalApp.handleRedirectPromise().catch(e=>{fail(e.message);});
+  account = res?.account || msalApp.getAllAccounts()[0] || null;
+  if(!account){ show("loading",false); show("signin"); return; }
+  loadData();
+}
+$("loginBtn").onclick = () => msalApp.loginRedirect({scopes:SCOPES});
+
+/* ---------- OneDrive I/O ---------- */
+const itemUrl = () => `${GRAPH}/me/drive/root:/${FILE_PATH.split("/").map(encodeURIComponent).join("/")}`;
+async function loadData(){
+  show("error",false); show("loading");
+  try{
+    const token = await getToken();
+    const meta = await fetch(itemUrl(), {headers:{Authorization:`Bearer ${token}`}});
+    if(meta.status===404) throw new Error(`Couldn't find "${FILE_PATH}" in your OneDrive. Check FILE_PATH in index.html.`);
+    if(!meta.ok) throw new Error(`OneDrive error ${meta.status}`);
+    const m = await meta.json(); eTag = m.eTag;
+    const buf = await (await fetch(m["@microsoft.graph.downloadUrl"])).arrayBuffer();
+    workbook = XLSX.read(buf,{type:"array",cellDates:true});
+    const ws = workbook.Sheets[SHEET];
+    if(!ws) throw new Error(`The workbook has no "${SHEET}" sheet.`);
+    books = XLSX.utils.sheet_to_json(ws,{defval:null}).filter(r=>r.Book).map(normalize);
+    show("loading",false); show("nav");
+    buildDatalists(); go(currentView||"stats");
+  }catch(e){ if(e.name!=="BrowserAuthError" && !/interaction/i.test(e.errorCode||"")) fail(e.message); }
+}
+function normalize(r){
+  let d=r.Finished;
+  if(!(d instanceof Date)){ const t=new Date(d); d=isNaN(t)?null:t; }
+  if(d) d=new Date(d.getTime()+12*3600e3); // guard against timezone edge shifting the month
+  const num=v=>v===null||v===""||isNaN(+v)?null:+v;
+  return {...r, Finished:d?new Date(d.getFullYear(),d.getMonth(),1,12):null,
+    Hours:num(r.Hours), Cost:num(r.Cost), Rating:num(r.Rating)};
+}
+async function saveData(){
+  const rows = books.map(b=>HEADERS.map(h=>b[h]??null));
+  const ws = XLSX.utils.aoa_to_sheet([HEADERS,...rows],{cellDates:true});
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  for(let R=1;R<=range.e.r;R++){
+    const c=ws[XLSX.utils.encode_cell({r:R,c:4})]; if(c&&c.t==="d") c.z="mmm-yy";
+    const p=ws[XLSX.utils.encode_cell({r:R,c:8})]; if(p&&p.t==="n") p.z="$#,##0.00";
+  }
+  ws["!cols"]=[32,24,12,30,10,8,10,11,10,8,34,70].map(w=>({wch:w}));
+  ws["!autofilter"]={ref:ws["!ref"]};
+  workbook.Sheets[SHEET]=ws;
+  const out = XLSX.write(workbook,{type:"array",bookType:"xlsx",cellDates:true});
+  const token = await getToken();
+  const res = await fetch(itemUrl()+":/content",{method:"PUT",
+    headers:{Authorization:`Bearer ${token}`,"If-Match":eTag,
+      "Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}, body:out});
+  if(res.status===412){ toast("File changed elsewhere, reloading…"); await loadData(); throw new Error("conflict"); }
+  if(res.status===423){ toast("File is open in Excel. Close it and try again."); throw new Error("locked"); }
+  if(!res.ok){ toast(`Save failed (${res.status})`); throw new Error("save"); }
+  eTag = (await res.json()).eTag;
+}
+function fail(msg){ show("loading",false); show("signin",false); $("errorMsg").textContent=msg; show("error"); }
+
+/* ---------- navigation ---------- */
+let currentView=null;
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{ if(b.dataset.view==="edit") openForm(-1); else go(b.dataset.view); });
+function go(v){
+  currentView=v;
+  ["stats","library","edit"].forEach(x=>show("view-"+x,x===v));
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.view===v));
+  $("title").textContent = v==="stats"?"Reading Stats": v==="library"?`Library (${books.length})`:(editIndex>=0?"Edit book":"Add a book");
+  if(v==="stats") renderStats(); if(v==="library") renderLibrary();
+  window.scrollTo(0,0);
+}
+$("refreshBtn").onclick=()=>{ if(account) loadData(); };
+
+/* ---------- stats ---------- */
+const sum=(a,f)=>a.reduce((s,x)=>s+(f(x)||0),0);
+const avg=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
+const fmt=(n,d=0)=>n==null?"–":n.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+function primaryGenre(g){ return (g||"Unknown").split(/[;,]/)[0].trim().replace(/^\w/,c=>c.toUpperCase()); }
+function groupBy(a,keyFn){ const m=new Map(); a.forEach(x=>{const k=keyFn(x); if(!m.has(k)) m.set(k,[]); m.get(k).push(x);}); return m; }
+
+function renderStats(){
+  const years=[...new Set(books.filter(b=>b.Finished).map(b=>b.Finished.getFullYear()))].sort();
+  const data = yearFilter==="all"?books:books.filter(b=>b.Finished&&b.Finished.getFullYear()==yearFilter);
+  const rated = data.filter(b=>b.Rating!=null).map(b=>b.Rating);
+  const now=new Date();
+  const thisMonth = books.filter(b=>b.Finished&&b.Finished.getFullYear()===now.getFullYear()&&b.Finished.getMonth()===now.getMonth());
+  const spotifyHrs = sum(thisMonth.filter(b=>b.Source==="Spotify"),b=>b.Hours);
+
+  // monthly series (continuous months between first and last)
+  const dated = data.filter(b=>b.Finished).sort((a,b)=>a.Finished-b.Finished);
+  const months=[];
+  if(dated.length){
+    let d=new Date(dated[0].Finished.getFullYear(),dated[0].Finished.getMonth(),1);
+    const end=dated[dated.length-1].Finished;
+    while(d<=end){ months.push({y:d.getFullYear(),m:d.getMonth()}); d=new Date(d.getFullYear(),d.getMonth()+1,1); }
+  }
+  const inMonth=(b,x)=>b.Finished.getFullYear()===x.y&&b.Finished.getMonth()===x.m;
+  const perMonth=months.map(x=>{const bs=dated.filter(b=>inMonth(b,x)); return {label:MONTHS[x.m],full:`${MONTHS[x.m]} ${x.y}`,count:bs.length,hours:sum(bs,b=>b.Hours),titles:bs.map(b=>b.Book)};});
+
+  const fic=data.filter(b=>b.Type==="Fiction").length, non=data.length-fic;
+  const bySource=[...groupBy(data,b=>b.Source||"Other")].map(([k,v])=>({name:k,n:v.length,hrs:sum(v,b=>b.Hours),avg:avg(v.filter(b=>b.Rating!=null).map(b=>b.Rating))})).sort((a,b)=>b.n-a.n);
+  const byGenre=[...groupBy(data,b=>primaryGenre(b.Genre))].map(([k,v])=>({name:k,n:v.length,avg:avg(v.filter(b=>b.Rating!=null).map(b=>b.Rating))})).sort((a,b)=>b.n-a.n||b.avg-a.avg).slice(0,8);
+  const byAuthor=[...groupBy(data,b=>b.Author||"Unknown")].map(([k,v])=>({name:k,n:v.length,avg:avg(v.filter(b=>b.Rating!=null).map(b=>b.Rating))})).filter(a=>a.n>1).sort((a,b)=>b.n-a.n);
+  const ratingDist=[5,4,3,2,1].map(r=>({name:"★".repeat(r),n:data.filter(b=>b.Rating===r).length}));
+  const favs=data.filter(b=>b.Rating===5).sort((a,b)=>b.Finished-a.Finished);
+
+  const maxCount=Math.max(1,...perMonth.map(p=>p.count)), maxHrs=Math.max(1,...perMonth.map(p=>p.hours));
+  const vbars=(key,max,unit,dp)=>`
+    <div class="vbars">${perMonth.map((p,i)=>`<div class="col" data-i="${i}" data-key="${key}">
+      <div class="val">${p[key]?fmt(p[key],dp):""}</div>
+      <div class="bar" style="height:${p[key]/max*100*0.85}%"></div></div>`).join("")}</div>
+    <div class="xlab">${perMonth.map(p=>`<span>${p.label}</span>`).join("")}</div>
+    <div class="tip" id="tip-${key}">Tap a bar for details</div>`;
+  const hbars=(items,valFn,labelFn)=>{ const mx=Math.max(1,...items.map(valFn)); return items.map(it=>`
+    <div class="hrow"><div class="name" title="${esc(it.name)}">${esc(it.name)}</div>
+    <div class="track"><div class="fill" style="width:${valFn(it)/mx*100}%"></div></div>
+    <div class="num">${labelFn(it)}</div></div>`).join(""); };
+
+  $("view-stats").innerHTML = `
+    <div class="seg" id="yearSeg">
+      <button data-y="all" class="${yearFilter==="all"?"on":""}">All time</button>
+      ${years.map(y=>`<button data-y="${y}" class="${yearFilter==y?"on":""}">${y}</button>`).join("")}
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="v">${data.length}</div><div class="l">Books finished</div></div>
+      <div class="kpi"><div class="v">${fmt(sum(data,b=>b.Hours))}</div><div class="l">Hours listened</div></div>
+      <div class="kpi"><div class="v">${fmt(avg(rated),1)}</div><div class="l">Average rating</div></div>
+      <div class="kpi"><div class="v">$${fmt(sum(data,b=>b.Cost),0)}</div><div class="l">Spent on books</div></div>
+      <div class="kpi"><div class="v">${fmt(data.length?sum(data,b=>b.Hours)/data.length:null,1)}</div><div class="l">Avg hours / book</div></div>
+      <div class="kpi"><div class="v">${fmt(perMonth.length?data.length/perMonth.length:null,1)}</div><div class="l">Books / month</div></div>
+      <div class="kpi"><div class="v">${thisMonth.length}</div><div class="l">Finished this month</div></div>
+      <div class="kpi"><div class="v">${fmt(spotifyHrs,1)}<span class="muted" style="font-size:15px"> / 15</span></div><div class="l">Spotify hrs this month</div></div>
+    </div>
+    <div class="card"><h2>Books per month</h2>${vbars("count",maxCount,"books",0)}</div>
+    <div class="card"><h2>Hours per month</h2>${vbars("hours",maxHrs,"hrs",0)}</div>
+    <div class="card"><h2>Fiction vs non-fiction</h2>
+      <div class="split"><div style="flex:${fic};background:var(--s1)"></div><div style="flex:${non};background:var(--s2)"></div></div>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Fiction ${fic} (${fmt(data.length?fic/data.length*100:0)}%)</span>
+      <span><i style="background:var(--s2)"></i>Non-fiction ${non} (${fmt(data.length?non/data.length*100:0)}%)</span></div></div>
+    <div class="card"><h2>Rating breakdown</h2>${hbars(ratingDist,i=>i.n,i=>`${i.n}`)}</div>
+    <div class="card"><h2>By source</h2>${hbars(bySource,i=>i.n,i=>`${i.n} <small>· ${fmt(i.hrs)}h · ${fmt(i.avg,1)}★</small>`)}</div>
+    <div class="card"><h2>Top genres</h2>${hbars(byGenre,i=>i.n,i=>`${i.n} <small>· ${fmt(i.avg,1)}★</small>`)}</div>
+    ${byAuthor.length?`<div class="card"><h2>Authors you keep coming back to</h2><ul class="list">${byAuthor.map(a=>`<li><span>${esc(a.name)}</span><span class="muted">${a.n} books · ${fmt(a.avg,1)}★</span></li>`).join("")}</ul></div>`:""}
+    <div class="card"><h2>5-star books (${favs.length})</h2><ul class="list">${favs.map(b=>`<li><span>${esc(b.Book)}</span><span class="muted small">${b.Finished?MONTHS[b.Finished.getMonth()]+" "+b.Finished.getFullYear():""}</span></li>`).join("")||'<li class="muted">None yet</li>'}</ul></div>`;
+
+  document.querySelectorAll("#yearSeg button").forEach(b=>b.onclick=()=>{yearFilter=b.dataset.y;renderStats();});
+  document.querySelectorAll(".vbars .col").forEach(c=>{
+    const h=()=>{ const p=perMonth[c.dataset.i], key=c.dataset.key;
+      c.parentNode.querySelectorAll(".col").forEach(x=>x.classList.toggle("sel",x===c));
+      $("tip-"+key).innerHTML = `<b>${p.full}</b>: ${key==="count"?`${p.count} book${p.count===1?"":"s"}`:`${fmt(p.hours,1)} hours`}${p.titles.length?" · "+esc(p.titles.join(", ")):""}`; };
+    c.onclick=h; c.onmouseenter=h;
+  });
+}
+
+/* ---------- library ---------- */
+const stars=r=>r==null?'<span class="muted small">unrated</span>':`<span class="stars">${"★".repeat(r)}${"☆".repeat(5-r)}</span>`;
+function renderLibrary(){
+  const q=$("search").value.trim().toLowerCase();
+  let list=books.map((b,i)=>({b,i})).filter(({b})=>!q||[b.Book,b.Author,b.Genre,b.Comment,b.Source].join(" ").toLowerCase().includes(q));
+  const s={recent:(a,b)=>(b.b.Finished||0)-(a.b.Finished||0)||b.i-a.i, rating:(a,b)=>(b.b.Rating??-1)-(a.b.Rating??-1),
+           title:(a,b)=>a.b.Book.localeCompare(b.b.Book), hours:(a,b)=>(b.b.Hours||0)-(a.b.Hours||0)}[sortMode];
+  list.sort(s);
+  $("bookList").innerHTML = list.map(({b,i})=>`
+    <div class="book" data-i="${i}">
+      <div class="row"><div class="t">${esc(b.Book)}</div>${stars(b.Rating)}</div>
+      <div class="meta">${esc(b.Author||"")} · ${b.Finished?MONTHS[b.Finished.getMonth()]+" "+b.Finished.getFullYear():""} · ${fmt(b.Hours,1)}h · ${esc(b.Source||"")}</div>
+      <div class="d">${b.Description?esc(b.Description)+"<br><br>":""}${b.Comment?`<b>My take:</b> ${esc(b.Comment)}<br>`:""}
+        <span class="chip">${esc(b.Type||"")}</span> <span class="muted small">${esc(b.Genre||"")}</span><br>
+        <button class="btn ghost" style="margin-top:10px" data-edit="${i}">Edit</button></div>
+    </div>`).join("") || '<p class="muted center">No matches</p>';
+  document.querySelectorAll(".book").forEach(el=>el.onclick=e=>{
+    if(e.target.dataset.edit){ openForm(+e.target.dataset.edit); return; }
+    el.classList.toggle("open"); });
+  $("title").textContent=`Library (${books.length})`;
+}
+$("search").oninput=renderLibrary;
+document.querySelectorAll("#sortSeg button").forEach(b=>b.onclick=()=>{sortMode=b.dataset.sort;document.querySelectorAll("#sortSeg button").forEach(x=>x.classList.toggle("on",x===b));renderLibrary();});
+
+/* ---------- add / edit ---------- */
+function buildDatalists(){
+  $("authorList").innerHTML=[...new Set(books.map(b=>b.Author).filter(Boolean))].sort().map(a=>`<option value="${esc(a)}">`).join("");
+  $("genreList").innerHTML=[...new Set(books.map(b=>b.Genre).filter(Boolean))].sort().map(a=>`<option value="${esc(a)}">`).join("");
+}
+$("ratingPick").innerHTML=[1,2,3,4,5].map(r=>`<button type="button" data-r="${r}">${r}★</button>`).join("");
+function setRating(r){ ratingVal=r; document.querySelectorAll("#ratingPick button").forEach(b=>b.classList.toggle("on",+b.dataset.r===r)); }
+$("ratingPick").onclick=e=>{ const r=+e.target.dataset.r; if(r) setRating(ratingVal===r?null:r); };
+function openForm(i){
+  editIndex=i; const f=$("bookForm"); f.reset();
+  const b=i>=0?books[i]:{Type:"Fiction",Source:"Libby",Acquired:"Free",Finished:new Date()};
+  for(const h of HEADERS){ const el=f.elements[h]; if(!el||h==="Rating") continue;
+    if(h==="Finished") el.value=b.Finished?`${b.Finished.getFullYear()}-${String(b.Finished.getMonth()+1).padStart(2,"0")}`:"";
+    else el.value=b[h]??""; }
+  setRating(b.Rating??null);
+  show("deleteBtn",i>=0); go("edit");
+}
+$("cancelBtn").onclick=()=>go(editIndex>=0?"library":"stats");
+$("bookForm").onsubmit=async e=>{
+  e.preventDefault(); const f=e.target, v=n=>f.elements[n].value.trim();
+  const [y,m]=v("Finished").split("-").map(Number);
+  const rec={Book:v("Book"),Author:v("Author")||null,Type:v("Type"),Genre:v("Genre")||null,Finished:new Date(y,m-1,1,12),
+    Hours:v("Hours")===""?null:+v("Hours"),Source:v("Source"),Acquired:v("Acquired"),
+    Cost:v("Cost")===""?(v("Acquired")==="Free"?0:null):+v("Cost"),Rating:ratingVal,Comment:v("Comment")||null,Description:v("Description")||null};
+  const backup=books.slice();
+  if(editIndex>=0) books[editIndex]=rec; else books.push(rec);
+  await commit(backup, editIndex>=0?"Saved":"Book added");
+};
+$("deleteBtn").onclick=async()=>{
+  if(!confirm(`Delete "${books[editIndex].Book}"?`)) return;
+  const backup=books.slice(); books.splice(editIndex,1); await commit(backup,"Deleted");
+};
+async function commit(backup,msg){
+  const btn=$("saveBtn"); btn.disabled=true; btn.textContent="Saving…";
+  try{ await saveData(); toast(msg+" ✓"); buildDatalists(); go("library"); }
+  catch(err){ if(err.message!=="conflict") books=backup; }
+  finally{ btn.disabled=false; btn.textContent="Save"; }
+}
+
+init();
+</script>
+</body>
+</html>
