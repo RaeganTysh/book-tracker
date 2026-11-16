@@ -96,6 +96,10 @@ nav button.on{color:var(--s1)}
 .book .d{font-size:13px;color:var(--text-2);margin-top:6px;display:none}
 .book.open .d{display:block}
 .book .row{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.bb{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;background:var(--s1);color:#fff;white-space:nowrap;margin-left:6px;vertical-align:1px}
+.seg button.bbf.on{background:var(--s1);border-color:var(--s1);color:#fff}
+.chk{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:15px;color:var(--text)}
+.chk input{width:22px;height:22px;accent-color:var(--s1)}
 .chip{font-size:11px;border-radius:999px;padding:2px 8px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
 form label{display:block;font-size:13px;color:var(--text-2);margin:12px 0 4px}
 form input,form select,form textarea{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:16px;font-family:inherit}
@@ -133,6 +137,7 @@ form textarea{min-height:70px;resize:vertical}
   <section id="view-library" class="hidden">
     <input class="search" id="search" placeholder="Search title, author, genre…" type="search">
     <div class="seg" id="sortSeg">
+      <button class="bbf" id="bbFilter">B&amp;B</button>
       <button data-sort="recent" class="on">Recent</button>
       <button data-sort="rating">Top rated</button>
       <button data-sort="title">A–Z</button>
@@ -161,6 +166,7 @@ form textarea{min-height:70px;resize:vertical}
       <label>Rating</label>
       <div class="rating-pick" id="ratingPick"></div>
       <input type="hidden" name="Rating">
+      <label class="chk"><input type="checkbox" name="BookClub"> B&amp;B book club pick</label>
       <label>Comment</label><textarea name="Comment"></textarea>
       <label>Description</label><textarea name="Description"></textarea>
       <div class="actions">
@@ -188,19 +194,19 @@ const FILE_PATH = "Personal/BookTracker.xlsx";   // path inside OneDrive, e.g. "
 /* ================================================= */
 
 const SHEET = "Books";
-const HEADERS = ["Book","Author","Type","Genre","Finished","Hours","Source","Acquired","Cost","Rating","Comment","Description"];
+const HEADERS = ["Book","Author","Type","Genre","Finished","Hours","Source","Acquired","Cost","Rating","Comment","Description","BookClub"];
 const SCOPES = ["Files.ReadWrite","User.Read"];
 const GRAPH = "https://graph.microsoft.com/v1.0";
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 const msalApp = new msal.PublicClientApplication({
   auth:{ clientId:CLIENT_ID, authority:"https://login.microsoftonline.com/common",
-         redirectUri: location.origin + location.pathname },
+         redirectUri: "https://raegantysh.github.io/book-tracker/" },
   cache:{ cacheLocation:"localStorage" }
 });
 
 let account=null, workbook=null, eTag=null, books=[], subs=[], editIndex=-1;
-let yearFilter="all", sortMode="recent", ratingVal=null;
+let yearFilter="all", sortMode="recent", ratingVal=null, bbOnly=false;
 const $ = id => document.getElementById(id);
 const show = (id,on=true) => $(id).classList.toggle("hidden",!on);
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -209,7 +215,7 @@ function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show")
 /* ---------- auth ---------- */
 async function getToken(){
   try{ return (await msalApp.acquireTokenSilent({scopes:SCOPES,account})).accessToken; }
-  catch(e){ await msalApp.acquireTokenRedirect({scopes:SCOPES,account}); throw e; }
+  catch(e){ await msalApp.acquireTokenRedirect({scopes:SCOPES,account,loginHint:account?.username}); throw e; }
 }
 async function init(){
   if(CLIENT_ID.startsWith("PASTE")){ fail("Open index.html and paste your Application (client) ID into CLIENT_ID."); return; }
@@ -249,7 +255,7 @@ function normalize(r){
   if(d) d=new Date(d.getTime()+12*3600e3); // guard against timezone edge shifting the month
   const num=v=>v===null||v===""||isNaN(+v)?null:+v;
   return {...r, Finished:d?new Date(d.getFullYear(),d.getMonth(),1,12):null,
-    Hours:num(r.Hours), Cost:num(r.Cost), Rating:num(r.Rating)};
+    Hours:num(r.Hours), Cost:num(r.Cost), Rating:num(r.Rating), BookClub:r.BookClub?"B&B":null};
 }
 async function saveData(){
   const rows = books.map(b=>HEADERS.map(h=>b[h]??null));
@@ -259,7 +265,7 @@ async function saveData(){
     const c=ws[XLSX.utils.encode_cell({r:R,c:4})]; if(c&&c.t==="d") c.z="mmm-yy";
     const p=ws[XLSX.utils.encode_cell({r:R,c:8})]; if(p&&p.t==="n") p.z="$#,##0.00";
   }
-  ws["!cols"]=[32,24,12,30,10,8,10,11,10,8,34,70].map(w=>({wch:w}));
+  ws["!cols"]=[32,24,12,30,10,8,10,11,10,8,34,70,10].map(w=>({wch:w}));
   ws["!autofilter"]={ref:ws["!ref"]};
   workbook.Sheets[SHEET]=ws;
   const out = XLSX.write(workbook,{type:"array",bookType:"xlsx",cellDates:true});
@@ -355,6 +361,8 @@ function renderStats(){
     <div class="card"><h2>Rating breakdown</h2>${hbars(ratingDist,i=>i.n,i=>`${i.n}`)}</div>
     <div class="card"><h2>By source</h2>${hbars(bySource,i=>i.n,i=>`${i.n} <small>· ${fmt(i.hrs)}h · ${fmt(i.avg,1)}★</small>`)}</div>
     <div class="card"><h2>Top genres</h2>${hbars(byGenre,i=>i.n,i=>`${i.n} <small>· ${fmt(i.avg,1)}★</small>`)}</div>
+    ${(()=>{const bb=data.filter(b=>b.BookClub); if(!bb.length) return ""; const r=avg(bb.filter(b=>b.Rating!=null).map(b=>b.Rating));
+      return `<div class="card"><h2>B&amp;B book club</h2><div class="kpis" style="margin:0"><div class="kpi"><div class="v">${bb.length}</div><div class="l">Club picks read</div></div><div class="kpi"><div class="v">${fmt(r,1)}</div><div class="l">Avg rating vs ${fmt(avg(rated),1)} overall</div></div></div></div>`;})()}
     ${byAuthor.length?`<div class="card"><h2>Authors you keep coming back to</h2><ul class="list">${byAuthor.map(a=>`<li><span>${esc(a.name)}</span><span class="muted">${a.n} books · ${fmt(a.avg,1)}★</span></li>`).join("")}</ul></div>`:""}
     <div class="card"><h2>5-star books (${favs.length})</h2><ul class="list">${favs.map(b=>`<li><span>${esc(b.Book)}</span><span class="muted small">${b.Finished?MONTHS[b.Finished.getMonth()]+" "+b.Finished.getFullYear():""}</span></li>`).join("")||'<li class="muted">None yet</li>'}</ul></div>`;
 
@@ -396,13 +404,13 @@ function renderInfo(){
 const stars=r=>r==null?'<span class="muted small">unrated</span>':`<span class="stars">${"★".repeat(r)}${"☆".repeat(5-r)}</span>`;
 function renderLibrary(){
   const q=$("search").value.trim().toLowerCase();
-  let list=books.map((b,i)=>({b,i})).filter(({b})=>!q||[b.Book,b.Author,b.Genre,b.Comment,b.Source].join(" ").toLowerCase().includes(q));
+  let list=books.map((b,i)=>({b,i})).filter(({b})=>!bbOnly||b.BookClub).filter(({b})=>!q||[b.Book,b.Author,b.Genre,b.Comment,b.Source].join(" ").toLowerCase().includes(q));
   const s={recent:(a,b)=>(b.b.Finished||0)-(a.b.Finished||0)||b.i-a.i, rating:(a,b)=>(b.b.Rating??-1)-(a.b.Rating??-1),
            title:(a,b)=>a.b.Book.localeCompare(b.b.Book), hours:(a,b)=>(b.b.Hours||0)-(a.b.Hours||0)}[sortMode];
   list.sort(s);
   $("bookList").innerHTML = list.map(({b,i})=>`
     <div class="book" data-i="${i}">
-      <div class="row"><div class="t">${esc(b.Book)}</div>${stars(b.Rating)}</div>
+      <div class="row"><div class="t">${esc(b.Book)}${b.BookClub?'<span class="bb">B&amp;B</span>':""}</div>${stars(b.Rating)}</div>
       <div class="meta">${esc(b.Author||"")} · ${b.Finished?MONTHS[b.Finished.getMonth()]+" "+b.Finished.getFullYear():""} · ${fmt(b.Hours,1)}h · ${esc(b.Source||"")}</div>
       <div class="d">${b.Description?esc(b.Description)+"<br><br>":""}${b.Comment?`<b>My take:</b> ${esc(b.Comment)}<br>`:""}
         <span class="chip">${esc(b.Type||"")}</span> <span class="muted small">${esc(b.Genre||"")}</span><br>
@@ -411,10 +419,11 @@ function renderLibrary(){
   document.querySelectorAll(".book").forEach(el=>el.onclick=e=>{
     if(e.target.dataset.edit){ openForm(+e.target.dataset.edit); return; }
     el.classList.toggle("open"); });
-  $("title").textContent=`Library (${books.length})`;
+  $("title").textContent=bbOnly?`B&B picks (${list.length})`:`Library (${books.length})`;
 }
 $("search").oninput=renderLibrary;
-document.querySelectorAll("#sortSeg button").forEach(b=>b.onclick=()=>{sortMode=b.dataset.sort;document.querySelectorAll("#sortSeg button").forEach(x=>x.classList.toggle("on",x===b));renderLibrary();});
+$("bbFilter").onclick=()=>{bbOnly=!bbOnly;$("bbFilter").classList.toggle("on",bbOnly);renderLibrary();};
+document.querySelectorAll("#sortSeg button[data-sort]").forEach(b=>b.onclick=()=>{sortMode=b.dataset.sort;document.querySelectorAll("#sortSeg button[data-sort]").forEach(x=>x.classList.toggle("on",x===b));renderLibrary();});
 
 /* ---------- add / edit ---------- */
 function buildDatalists(){
@@ -428,6 +437,7 @@ function openForm(i){
   editIndex=i; const f=$("bookForm"); f.reset();
   const b=i>=0?books[i]:{Type:"Fiction",Source:"Libby",Acquired:"Free",Finished:new Date()};
   for(const h of HEADERS){ const el=f.elements[h]; if(!el||h==="Rating") continue;
+    if(h==="BookClub"){ el.checked=!!b.BookClub; continue; }
     if(h==="Finished") el.value=b.Finished?`${b.Finished.getFullYear()}-${String(b.Finished.getMonth()+1).padStart(2,"0")}`:"";
     else el.value=b[h]??""; }
   setRating(b.Rating??null);
@@ -439,7 +449,7 @@ $("bookForm").onsubmit=async e=>{
   const [y,m]=v("Finished").split("-").map(Number);
   const rec={Book:v("Book"),Author:v("Author")||null,Type:v("Type"),Genre:v("Genre")||null,Finished:new Date(y,m-1,1,12),
     Hours:v("Hours")===""?null:+v("Hours"),Source:v("Source"),Acquired:v("Acquired"),
-    Cost:v("Cost")===""?(v("Acquired")==="Free"?0:null):+v("Cost"),Rating:ratingVal,Comment:v("Comment")||null,Description:v("Description")||null};
+    Cost:v("Cost")===""?(v("Acquired")==="Free"?0:null):+v("Cost"),Rating:ratingVal,Comment:v("Comment")||null,Description:v("Description")||null,BookClub:f.elements.BookClub.checked?"B&B":null};
   const backup=books.slice();
   if(editIndex>=0) books[editIndex]=rec; else books.push(rec);
   await commit(backup, editIndex>=0?"Saved":"Book added");
